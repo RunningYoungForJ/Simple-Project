@@ -258,6 +258,157 @@
 ## DAO层-持久层
 
 > 持久层的主要工作是从数据库表中加载数据并实例化为对应的领域对象，或将领域对象持久化到数据库表中，即负责数据的访问和操作。
+>
+> 在DAO中编写SQL语句时，通常将SQL语句写在类静态变量中，这样会使代码更具有可读性。如果编写的SQL语句比较长，那么一般会采用多行字符串的方式进行构造。
+>
+> 注意：在构造多行SQL语句时，会容易产生拼接错误，规避这种错误的方式是在每行SQL语句的前后都加一个空格，这样就可以有效避免分行SQL语句组合后的错误。
+
+1. UserDao
+
+   ```java
+   package com.smart.dao;
+
+   import com.smart.domain.User;
+   import org.springframework.beans.factory.annotation.Autowired;
+   import org.springframework.jdbc.core.JdbcTemplate;
+   import org.springframework.jdbc.core.RowCallbackHandler;
+   import org.springframework.stereotype.Repository;
+
+   import java.sql.ResultSet;
+   import java.sql.SQLException;
+   import java.util.List;
+
+   /**
+    * Created by yangkun on 2018/2/28.
+    */
+   /*
+   * 使用@Repository定义一个Dao的Bean，使用@Autowired将spring容器中的jdbcTemplate注入到该Dao中
+   * */
+   @Repository
+   public class UserDao {
+       /*
+       * 在org.springframework.jdbc.core.JdbcTemplate中封装了样板式代码
+       * */
+       private JdbcTemplate jdbcTemplate;
+
+       private final static String MATCH_COUNT_SQL="select count(*) from t_user where user_name=? and password=?";
+
+       private final static String UPDATE_LOGIN_INFO_SQL="update t_user set last_visit=?,last_id=?,credits=? where id=?";
+
+       @Autowired
+       public void setJdbcTemplate(JdbcTemplate jdbcTemplate){
+           this.jdbcTemplate=jdbcTemplate;
+       }
+
+       public int getMatchCount(String userName,String password){
+           String sqlStr="select * from t_user where user_name=? and password=?";
+           /*
+           * spring 3.2.2之后，jdbctemplate中的queryForInt已经被取消了！
+           * 全部用queryForObject代替
+           * */
+           return jdbcTemplate.queryForObject(sqlStr,new Object[]{userName,password},Integer.class);
+       }
+
+       public User findUserByUserName(final String userName){
+           final User user=new User();
+           jdbcTemplate.query(MATCH_COUNT_SQL, new Object[]{userName},
+                   /*查询结果的处理回调接口*/
+                   new RowCallbackHandler() {
+                       public void processRow(ResultSet rs) throws SQLException {
+                           user.setUserId(rs.getInt("user_id"));
+                           user.setUserName(userName);
+                           user.setCredits(rs.getInt("credits"));
+                       }
+                   }
+           );
+           return user;
+       }
+
+       public void setUpdateLoginInfo(User user){
+           jdbcTemplate.update(UPDATE_LOGIN_INFO_SQL,new Object[]{user.getLastVisit(),user.getLastIp(),user.getCredits(),user.getUserId()});
+       }
+
+
+   }
+   ```
+
+2. LoginLogDao
+
+   ```java
+   package com.smart.dao;
+
+   import com.smart.domain.LoginLog;
+   import org.springframework.beans.factory.annotation.Autowired;
+   import org.springframework.jdbc.core.JdbcTemplate;
+   import org.springframework.stereotype.Repository;
+
+   /**
+    * Created by yangkun on 2018/2/28.
+    * 负责记录用户的登录日志
+    */
+
+   @Repository
+   public class LoginLogDao {
+       private JdbcTemplate jdbcTemplate;
+
+       private final static String INSERT_LOGIN_LOG_SQL=" insert into t_login_log "+
+               " (user_id,ip,login_datetime) values(?,?,?)";
+       
+       @Autowired
+       public void setJdbcTemplate(JdbcTemplate jdbcTemplate) {
+           this.jdbcTemplate = jdbcTemplate;
+       }
+       
+       public void insertLoginLog(LoginLog loginLog){
+           Object[] args={loginLog.getUserId(),loginLog.getIp(),loginLog.getLoginDate()};
+           jdbcTemplate.update(INSERT_LOGIN_LOG_SQL,args);
+       }
+   }
+   ```
+
+3. 在Spring中装配DAO
+
+   > 在DAO类的实现中，需要用到JdbcTemplate作为访问数据库的入口。但JdbcTemplate需要针对数据库创建连接。
+   >
+   > JdbcTemplate封装了所有针对数据创建连接、获取数据的模版操作。它需要一个DataSource，从DataSource中获取和创建连接。
+   >
+   > 所以必须事先声明一个数据源dataSource，用来声明数据库配置信息，然后使用JdbcTemplate的Bean去调用该dataSource。
+
+   具体的配置信息在src/main/resources下的smart-context.xml中。
+
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <beans xmlns="http://www.springframework.org/schema/beans"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xmlns:p="http://www.springframework.org/schema/p"
+          xmlns:context="http://www.springframework.org/schema/context"
+          xsi:schemaLocation="http://www.springframework.org/schema/beans
+            http://www.springframework.org/schema/beans/spring-beans-4.0.xsd
+            http://www.springframework.org/schema/context
+            http://www.springframework.org/schema/context/spring-context-4.0.xsd">
+       <!--开启自动扫描，扫描类包：将标注Spring注解的类自动转化为Bean，同时完成Bean的注入-->
+       <context:component-scan base-package="com.smart.dao"></context:component-scan>
+
+       <!--定义一个使用DBCP实现的数据源-->
+       <bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource"
+             destroy-method="close"
+             p:driverClassName="com.mysql.jdbc.Driver"
+             p:url="jdbc:myslq://localhost:3306/sampledb"
+             p:username="root"
+             p:password="123456">
+       </bean>
+
+       <!--定义JDBC模版Bean-->
+       <bean id="jdbcTemplate" class="org.springframework.jdbc.core.JdbcTemplate"
+             p:dataSource-ref="dataSource">
+       </bean>
+
+   </beans>
+   ```
+
+## Service业务层
+
+1. UserService
 
 ​                               
 
