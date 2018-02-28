@@ -16,7 +16,7 @@
 2. 用户输入用户名/密码信息，并提交表单到对应的controller。
 3. 服务器端检查接收的用户信息是否匹配，No-4，Yes-5。
 4. 信息不匹配，返回登录页面，并给出提示。
-5. 信息匹配，更新用户登录日志（最后登录时间、Ip地址）（LoginLogDAO），给用户增加5个积分（UserDAO），最后重定向到欢迎页面。（main.jsp）
+5. 信息匹配，更新用户登录日志（增加一条登录记录）（LoginLogDAO），给用户增加5个积分（UserDAO）更新用户的最后登录IP、时间，最后重定向到欢迎页面。（main.jsp）
 
 ## 数据库搭建
 
@@ -408,7 +408,110 @@
 
 ## Service业务层
 
+> 登录模块仅有一个业务层，即UserService。UserService层负责将持久层的UserDao和LoginLogDao组织起来，完成用户/密码认证，登录日志的操作。
+
 1. UserService
+
+   ```java
+   package com.smart.service;
+
+   import com.smart.dao.LoginLogDao;
+   import com.smart.dao.UserDao;
+   import com.smart.domain.LoginLog;
+   import com.smart.domain.User;
+   import org.springframework.beans.factory.annotation.Autowired;
+   import org.springframework.stereotype.Service;
+   import org.springframework.transaction.annotation.Transactional;
+
+   /**
+    * Created by yangkun on 2018/2/28.
+    */
+   @Service
+   public class UserService {
+       private UserDao userDao;
+       private LoginLogDao loginLogDao;
+
+       @Autowired
+       public void setUserDao(UserDao userDao) {
+           this.userDao = userDao;
+       }
+
+       @Autowired
+       public void setLoginLogDao(LoginLogDao loginLogDao) {
+           this.loginLogDao = loginLogDao;
+       }
+
+       public boolean hasMatchUser(String userName,String password){
+           int matchCount=userDao.getMatchCount(userName,password);
+           return matchCount>0;
+       }
+
+       public User findUserByUserName(String userName){
+           return userDao.findUserByUserName(userName);
+       }
+
+       /*
+       * 标注该方法运行在事务环境中
+       * 因为在Spring事务管理器拦截切入表达式上加入了@Transactional过滤
+       * loginSuccess完成一个事务性的数据操作：更新t_user表记录并添加t_login_log表记录
+       * 需要使用配置文件来告诉Spring哪些业务类需要工作在事务环境下，以及事务的规则和内容。在smart-context.xml中配置事务信息
+       * */
+       @Transactional
+       public void loginSuccess(User user){
+           user.setCredits(5+user.getCredits());
+           LoginLog loginLog=new LoginLog();
+           loginLog.setUserId(user.getUserId());
+           loginLog.setIp(user.getLastIp());
+           loginLog.setLoginDate(user.getLastVisit());
+           userDao.setUpdateLoginInfo(user);
+           loginLogDao.insertLoginLog(loginLog);
+       }
+   }
+   ```
+
+2. 在loginSuccess方法中添加了事务操作。但需要通过配置文件来告诉哪些类的哪些方法需要工作在事务环境下，以及事务的规则和内容。具体的事务配置在smart-context.xml中。(这里只贴出事务配置部分)
+
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <beans xmlns="http://www.springframework.org/schema/beans"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xmlns:p="http://www.springframework.org/schema/p"
+          xmlns:context="http://www.springframework.org/schema/context"
+          xmlns:aop="http://www.springframework.org/schema/aop"
+          xmlns:tx="http://www.springframework.org/schema/tx"
+          xsi:schemaLocation="http://www.springframework.org/schema/beans
+            http://www.springframework.org/schema/beans/spring-beans-4.0.xsd
+            http://www.springframework.org/schema/context
+            http://www.springframework.org/schema/context/spring-context-4.0.xsd
+            http://www.springframework.org/schema/aop
+            http://www.springframework.org/schema/aop/spring-aop-4.0.xsd">
+       <!--开启自动扫描，扫描类包：将标注Spring注解的类自动转化为Bean，同时完成Bean的注入-->
+       <context:component-scan base-package="com.smart.dao"></context:component-scan>
+
+       <context:component-scan base-package="com.smart.service"></context:component-scan>
+
+       <!--定义一个基于数据源的DataSourceTransactionManager事务管理器，该事务管理器负责声明式事务的管理，该管理器需要引入dataSource Bean-->
+       <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager"
+             p:dataSource-ref="dataSource">
+       </bean>
+
+       <!--通过aop和tx命名空间的语法，以aop的方式为com.smart.service包下所有类的所有标注@Transactional注解的方法都添加事务增强，即它们都工作在事务环境下-->
+       <aop:config proxy-target-class="true">
+           <aop:pointcut id="serviceMethod"
+                         expression="(execution(* com.smart.service..*(..))) and (@annotation(org.springframework.transaction.annotation.Transactional))">
+           </aop:pointcut>
+           <aop:advisor pointcut-ref="serviceMethod" advice-ref="txAdvice"></aop:advisor>
+       </aop:config>
+
+       <tx:advice id="txAdvice" transaction-manager="transactionManager">
+           <tx:attributes>
+               <tx:method name="*"/>
+           </tx:attributes>
+       </tx:advice>
+   </beans>
+   ```
+
+   ​
 
 ​                               
 

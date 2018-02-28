@@ -23,9 +23,11 @@ public class UserDao {
     * */
     private JdbcTemplate jdbcTemplate;
 
-    private final static String MATCH_COUNT_SQL="select count(*) from t_user where user_name=? and password=?";
+    private final static String MATCH_COUNT_SQL="select * from t_user where user_name=? and password=?";
 
-    private final static String UPDATE_LOGIN_INFO_SQL="update t_user set last_visit=?,last_id=?,credits=? where id=?";
+    private final static String FIND_USER_SQL="select * from t_user where user_name=?";
+
+    private final static String UPDATE_LOGIN_INFO_SQL="update t_user set last_visit=?,last_id=?,credits=? where user_id=?";
 
     @Autowired
     public void setJdbcTemplate(JdbcTemplate jdbcTemplate){
@@ -33,17 +35,16 @@ public class UserDao {
     }
 
     public int getMatchCount(String userName,String password){
-        String sqlStr="select * from t_user where user_name=? and password=?";
         /*
         * spring 3.2.2之后，jdbctemplate中的queryForInt已经被取消了！
         * 全部用queryForObject代替
         * */
-        return jdbcTemplate.queryForObject(sqlStr,new Object[]{userName,password},Integer.class);
+        return jdbcTemplate.queryForObject(MATCH_COUNT_SQL,new Object[]{userName,password},Integer.class);
     }
 
     public User findUserByUserName(final String userName){
         final User user=new User();
-        jdbcTemplate.query(MATCH_COUNT_SQL, new Object[]{userName},
+        jdbcTemplate.query(FIND_USER_SQL, new Object[]{userName},
                 /*查询结果的处理回调接口*/
                 new RowCallbackHandler() {
                     public void processRow(ResultSet rs) throws SQLException {
