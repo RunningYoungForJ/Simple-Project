@@ -327,6 +327,7 @@
        public void setUpdateLoginInfo(User user){
            jdbcTemplate.update(UPDATE_LOGIN_INFO_SQL,new Object[]{user.getLastVisit(),user.getLastIp(),user.getCredits(),user.getUserId()});
        }
+   ```
 
 
    }
@@ -512,6 +513,8 @@
    ```
 
    ​
+
+   > 项目于2018年3月6日重构，采用Spring Boot快速部署Spring Mvc。​
 
 ​                               
 
